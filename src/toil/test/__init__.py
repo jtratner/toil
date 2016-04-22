@@ -140,20 +140,41 @@ def needs_aws(test_item):
         dot_boto_path = os.path.expanduser('~/.boto')
         dot_aws_credentials_path = os.path.expanduser('~/.aws/credentials')
         hv_uuid_path = '/sys/hypervisor/uuid'
-        if (os.path.exists(dot_boto_path)
-            or os.path.exists(dot_aws_credentials_path)
-            # Assume that EC2 machines like the Jenkins slave that we run CI on will have IAM roles
-            or os.path.exists(hv_uuid_path) and file_begins_with(hv_uuid_path,'ec2')):
+        try:
+            with open(dot_boto_path) as f:
+                if 'aws_access_key_id' in f.read().decode('utf8'):
+                    return test_item
+        except IOError:
+            pass
+        if (os.path.exists(dot_aws_credentials_path)
+            or (os.path.exists(hv_uuid_path) and file_begins_with(hv_uuid_path,'ec2'))):
             return test_item
         else:
             return unittest.skip("Skipping test. Create ~/.boto or ~/.aws/credentials to include "
                                  "this test.")(test_item)
 
-
 def file_begins_with(path, prefix):
     with open(path) as f:
         return f.read(len(prefix)) == prefix
 
+def needs_google(test_item):
+    """
+    Use as a decorator before test classes or methods to only run them if Google Storage usable.
+    """
+    test_item = _mark_test('google', test_item)
+    try:
+        import boto
+    except ImportError:
+        return unittest.skip("Skipping test. Install Toil with the 'google' extra to include this "
+                             "test.")(test_item)
+    else:
+        dot_boto_path = os.path.expanduser('~/.boto')
+        try:
+            with open(dot_boto_path) as w:
+                if 'gs_access_key_id' in w.read().decode('utf-8'):
+                    return test_item
+        except IOError:
+            return unittest.skip("Skipping test. Create properly configured ~/.boto to include this test.")(test_item)
 
 def needs_azure(test_item):
     """
