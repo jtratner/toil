@@ -27,6 +27,7 @@ import shutil
 import stat
 import inspect
 from collections import defaultdict
+import dill
 from threading import Thread, Semaphore, Event
 from Queue import Queue, Empty
 from bd2k.util.expando import Expando
@@ -191,11 +192,16 @@ class Job(object):
         
         :param fn: Function to be run as a child job with ``*args`` and ``**kwargs`` as \
         arguments to this function. See toil.job.FunctionWrappingJob for reserved \
-        keyword arguments used to specify resource requirements.
+        keyword arguments used to specify resource requirements. Can also accept a
+        PromisedRequirement instance for the reserved resource requirements.
         :return: The new child job that wraps fn.
         :rtype: toil.job.FunctionWrappingJob
         """
-        return self.addChild(FunctionWrappingJob(fn, *args, **kwargs))
+        convertPromiseToPromisedRequirement(kwargs)
+        if hasPromisedRequirement(kwargs):
+            return self.addChild(PromisedRequirementFunctionWrappingJob(fn, *args, **kwargs))
+        else:
+            return self.addChild(FunctionWrappingJob(fn, *args, **kwargs))
 
     def addFollowOnFn(self, fn, *args, **kwargs):
         """
@@ -203,11 +209,16 @@ class Job(object):
         
         :param fn: Function to be run as a follow-on job with ``*args`` and ``**kwargs`` as \
         arguments to this function. See toil.job.FunctionWrappingJob for reserved \
-        keyword arguments used to specify resource requirements.
+        keyword arguments used to specify resource requirements. Can also accept a
+        PromisedRequirement instance for the reserved resource requirements.
         :return: The new follow-on job that wraps fn.
         :rtype: toil.job.FunctionWrappingJob
         """
-        return self.addFollowOn(FunctionWrappingJob(fn, *args, **kwargs))
+        convertPromiseToPromisedRequirement(kwargs)
+        if hasPromisedRequirement(kwargs):
+            return self.addFollowOn(PromisedRequirementFunctionWrappingJob(fn, *args, **kwargs))
+        else:
+            return self.addFollowOn(FunctionWrappingJob(fn, *args, **kwargs))
 
     def addChildJobFn(self, fn, *args, **kwargs):
         """
@@ -216,11 +227,16 @@ class Job(object):
         
         :param fn: Job function to be run as a child job with ``*args`` and ``**kwargs`` as \
         arguments to this function. See toil.job.JobFunctionWrappingJob for reserved \
-        keyword arguments used to specify resource requirements.
+        keyword arguments used to specify resource requirements. Can also accept a
+        PromisedRequirement instance for the reserved resource requirements.
         :return: The new child job that wraps fn.
         :rtype: toil.job.JobFunctionWrappingJob
         """
-        return self.addChild(JobFunctionWrappingJob(fn, *args, **kwargs))
+        convertPromiseToPromisedRequirement(kwargs)
+        if hasPromisedRequirement(kwargs):
+            return self.addChild(PromisedRequirementJobFunctionWrappingJob(fn, *args, **kwargs))
+        else:
+            return self.addChild(JobFunctionWrappingJob(fn, *args, **kwargs))
 
     def addFollowOnJobFn(self, fn, *args, **kwargs):
         """
@@ -229,11 +245,16 @@ class Job(object):
         
         :param fn: Job function to be run as a follow-on job with ``*args`` and ``**kwargs`` as \
         arguments to this function. See toil.job.JobFunctionWrappingJob for reserved \
-        keyword arguments used to specify resource requirements.
+        keyword arguments used to specify resource requirements. Can also accept a
+        PromisedRequirement instance for the reserved resource requirements.
         :return: The new follow-on job that wraps fn.
         :rtype: toil.job.JobFunctionWrappingJob
         """
-        return self.addFollowOn(JobFunctionWrappingJob(fn, *args, **kwargs))
+        convertPromiseToPromisedRequirement(kwargs)
+        if hasPromisedRequirement(kwargs):
+            return self.addFollowOn(PromisedRequirementJobFunctionWrappingJob(fn, *args, **kwargs))
+        else:
+            return self.addFollowOn(JobFunctionWrappingJob(fn, *args, **kwargs))
 
     @staticmethod
     def wrapFn(fn, *args, **kwargs):
@@ -243,11 +264,16 @@ class Job(object):
         
         :param fn: Function to be run with ``*args`` and ``**kwargs`` as arguments. \
         See toil.job.JobFunctionWrappingJob for reserved keyword arguments used \
-        to specify resource requirements.
+        to specify resource requirements. Can also accept a PromisedRequirement
+        instance for the reserved resource requirements.
         :return: The new function that wraps fn.
         :rtype: toil.job.FunctionWrappingJob
         """
-        return FunctionWrappingJob(fn, *args, **kwargs)
+        convertPromiseToPromisedRequirement(kwargs)
+        if hasPromisedRequirement(kwargs):
+            return PromisedRequirementFunctionWrappingJob(fn, *args, **kwargs)
+        else:
+            return FunctionWrappingJob(fn, *args, **kwargs)
 
     @staticmethod
     def wrapJobFn(fn, *args, **kwargs):
@@ -257,11 +283,16 @@ class Job(object):
         
         :param fn: Job function to be run with ``*args`` and ``**kwargs`` as arguments. \
         See toil.job.JobFunctionWrappingJob for reserved keyword arguments used \
-        to specify resource requirements.
+        to specify resource requirements. Can also accept a
+        PromisedRequirement instance for the reserved resource requirements.
         :return: The new job function that wraps fn.
         :rtype: toil.job.JobFunctionWrappingJob
         """
-        return JobFunctionWrappingJob(fn, *args, **kwargs)
+        convertPromiseToPromisedRequirement(kwargs)
+        if hasPromisedRequirement(kwargs):
+            return PromisedRequirementJobFunctionWrappingJob(fn, *args, **kwargs)
+        else:
+            return JobFunctionWrappingJob(fn, *args, **kwargs)
 
     def encapsulate(self):
         """
@@ -1410,12 +1441,14 @@ class Job(object):
         """
         return self.__class__.__name__
 
+
 class JobException( Exception ):
     """
     General job exception. 
     """
     def __init__( self, message ):
         super( JobException, self ).__init__( message )
+
 
 class JobGraphDeadlockException( JobException ):
     """
@@ -1424,6 +1457,7 @@ class JobGraphDeadlockException( JobException ):
     """
     def __init__( self, string ):
         super( JobGraphDeadlockException, self ).__init__( string )
+
 
 class FunctionWrappingJob(Job):
     """
@@ -1473,6 +1507,7 @@ class FunctionWrappingJob(Job):
     def _jobName(self):
         return ".".join((self.__class__.__name__,self.userFunctionModule.name,self.userFunctionName))
 
+
 class JobFunctionWrappingJob(FunctionWrappingJob):
     """
     A job function is a function whose first argument is a :class:`job.Job` \
@@ -1489,6 +1524,56 @@ class JobFunctionWrappingJob(FunctionWrappingJob):
         self.fileStore = fileStore
         rValue = userFunction(*((self,) + tuple(self._args)), **self._kwargs)
         return rValue
+
+
+class PromisedRequirementFunctionWrappingJob(FunctionWrappingJob):
+    """
+    Adds child function using parent function parameters and fulfilled Promise values.
+
+    (see :class:`toil.job.FunctionWrappingJob` and :class:`toil.job.Job`)
+    """
+
+    def __init__(self, userFunction, *args, **kwargs):
+
+        self.promised_requirement = {}
+
+        # Reset any PromisedRequirement instances to default values until the promise can be fulfilled.
+        # See toil.job.PromisedRequirement
+        requirements = {'disk': '32M', 'memory': '32M', 'cores': 0.1}
+        for requirement, default in requirements.items():
+            if requirement in kwargs and isinstance(kwargs[requirement], PromisedRequirement):
+                self.promised_requirement[requirement] = kwargs[requirement]
+                kwargs[requirement] = default
+
+        super(PromisedRequirementFunctionWrappingJob, self).__init__(userFunction, *args, **kwargs)
+
+    def run(self, fileStore):
+        # Assumes promises are fulfilled when parent job is run
+        self.replacePromisedRequirements()
+        userFunction = self._getUserFunction()
+        return self.addChildFn(userFunction, *self._args, **self._kwargs).rv()
+
+    def replacePromisedRequirements(self):
+        requirements = ["disk", "memory", "cores"]
+        for requirement in requirements:
+            try:
+                self._kwargs[requirement] = self.promised_requirement[requirement].get_value()
+            except KeyError:
+                self._kwargs[requirement] = getattr(self, requirement)
+
+
+class PromisedRequirementJobFunctionWrappingJob(PromisedRequirementFunctionWrappingJob):
+    """
+    Add child job function using parent function parameters and fulfilled Promise values.
+
+    (see :class:`toil.job.JobFunctionWrappingJob and :class:`toil.job.Job`)
+    """
+
+    def run(self, fileStore):
+        self.replacePromisedRequirements()
+        userFunction = self._getUserFunction()
+        return self.addChildJobFn(userFunction, *self._args, **self._kwargs).rv()
+
 
 class EncapsulatedJob(Job):
     """
@@ -1694,3 +1779,59 @@ class Promise(object):
             # corrupted
             value = cPickle.load(fileHandle)
             return value
+
+
+class PromisedRequirement(object):
+    def __init__(self, *args):
+        """
+        Class for manipulating Promise instances.
+        (see toil.job.Promise)
+
+        :param args[0]: function to act on instance args
+                        default: lambda x: x
+        :param int|Promise args[1:]: list of args, ordered with respect to function parameters
+        """
+        if hasattr(args[0], '__call__'):
+            func = args[0]
+            args = args[1:]
+        else:
+            func = lambda x: x
+
+        self._func = dill.dumps(func)
+        self._args = list(args)
+
+    def get_value(self):
+        """
+        Returns PromisedRequirement value
+        """
+        func = dill.loads(self._func)
+        return func(*self._args)
+
+
+def convertPromiseToPromisedRequirement(kwargs):
+    """
+    Converts Promise to PromisedRequirement instance
+    for reserved resource arguments.
+
+    :param dict kwargs: function keyword arguments
+    :return: kwargs object with updated values
+    """
+    requirements = ["disk", "memory", "cores"]
+    # If a PromisedJobReturnValue was passed as a job requirement,
+    # convert it into a PromisedRequirement object
+    for r in requirements:
+        if isinstance(kwargs.get(r), Promise):
+            kwargs[r] = PromisedRequirement(kwargs[r])
+
+
+def hasPromisedRequirement(kwargs):
+    """
+    Returns true if a reserved resource keyword is a
+    PromisedRequirement instance.
+
+    :param kwargs: function keyword arguments
+    :return: bool
+    """
+    requirements = ["disk", "memory", "cores"]
+    return any(isinstance(kwargs.get(r), PromisedRequirement) for r in requirements)
+
