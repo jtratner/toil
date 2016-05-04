@@ -46,9 +46,8 @@ class hidden:
         __metaclass__ = ABCMeta
 
         cpu_count = multiprocessing.cpu_count()
-        cpu_count = 2
 
-        allocated_cores = {1, 2, cpu_count}
+        allocated_cores = sorted(list({1, 2, cpu_count}))
 
         @abstractmethod
         def createBatchSystem(self):
@@ -86,7 +85,7 @@ class hidden:
                 assert (min_value, max_value) == (0, 0)
 
                 root = Job.wrapJobFn(max_concurrency, self.cpu_count, counter_path, cores_per_job,
-                                     cores=self.cpu_count, memory='32M', disk='32M')
+                                     cores=0.1, memory='32M', disk='1M')
                 value = Job.Runner.startToil(root, options)
                 self.assertEqual(value, self.cpu_count / cores_per_job)
 
@@ -106,9 +105,9 @@ class hidden:
                 assert (min_value, max_value) == (0, 0)
 
                 root = Job()
-                one1 = Job.wrapFn(one, cores=0.1, memory='32M', disk='32M')
-                one2 = Job.wrapFn(one, cores=0.1, memory='32M', disk='32M')
-                mb = Job.wrapFn(thirtyTwoMB, cores=0.1, memory='32M', disk='32M')
+                one1 = Job.wrapFn(one, cores=0.1, memory='32M', disk='1M')
+                one2 = Job.wrapFn(one, cores=0.1, memory='32M', disk='1M')
+                mb = Job.wrapFn(thirtyTwoMB, cores=0.1, memory='32M', disk='1M')
                 root.addChild(one1)
                 root.addChild(one2)
                 root.addChild(mb)
@@ -132,9 +131,9 @@ def max_concurrency(job, cpu_count, filename, cores_per_job):
     :param int cores_per_job: number of cores assigned to each job
     :return int max concurrency value:
     """
-    one1 = job.addChildFn(one, cores=0.1, memory='32M', disk=1001)
-    one2 = job.addChildFn(one, cores=0.1, memory='32M', disk=1001)
-    mb = job.addChildFn(thirtyTwoMB, cores=0.1, memory='32M', disk=1001)
+    one1 = job.addChildFn(one, cores=0.1, memory='32M', disk='1M')
+    one2 = job.addChildFn(one, cores=0.1, memory='32M', disk='1M')
+    mb = job.addChildFn(thirtyTwoMB, cores=0.1, memory='32M', disk='1M')
 
     values = []
     for _ in range(cpu_count):
@@ -152,7 +151,7 @@ def one():
 def thirtyTwoMB():
     return '32M'
 
-
+# TODO camel case
 def measure_concurrency(filepath):
     """
     Run in parallel to test the number of concurrent tasks.

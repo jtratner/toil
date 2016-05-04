@@ -1539,7 +1539,7 @@ class PromisedRequirementFunctionWrappingJob(FunctionWrappingJob):
 
         # Reset any PromisedRequirement instances to default values until the promise can be fulfilled.
         # See toil.job.PromisedRequirement
-        requirements = {'disk': '32M', 'memory': '32M', 'cores': 0.1}
+        requirements = {'disk': '1Mi', 'memory': '32M', 'cores': 0.1}
         for requirement, default in requirements.items():
             if requirement in kwargs and isinstance(kwargs[requirement], PromisedRequirement):
                 self.promised_requirement[requirement] = kwargs[requirement]
