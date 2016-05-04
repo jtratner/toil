@@ -47,10 +47,11 @@ class hidden:
 
         cpu_count = multiprocessing.cpu_count()
 
-        allocated_cores = sorted(list({1, 2, cpu_count}))
+        allocated_cores = sorted({1, 2, cpu_count})
+        allocated_cores = [1]
 
         @abstractmethod
-        def createBatchSystem(self):
+        def getBatchSystemName(self):
             """
             :rtype: (str, AbstractBatchSystem)
             """
@@ -61,64 +62,65 @@ class hidden:
 
         def setUp(self):
             self.config = self._createDummyConfig()
-            self.batchSystemName, self.batchSystem = self.createBatchSystem()
+            self.batchSystemName = self.getBatchSystemName()
             super(hidden.AbstractPromisedRequirementsTest, self).setUp()
 
         def tearDown(self):
-            self.batchSystem.shutdown()
             super(hidden.AbstractPromisedRequirementsTest, self).tearDown()
 
         # TODO Add num_cores to allocated cores
         def testPromisedRequirementDynamic(self):
-            for cores_per_job in self.allocated_cores:
-                temp_dir = self._createTempDir('testFiles')
+            # for cores_per_job in self.allocated_cores:
+            cores_per_job = 1
+            temp_dir = self._createTempDir('testFiles')
 
-                options = Job.Runner.getDefaultOptions(self._getTestJobStorePath())
-                options.logLevel = "DEBUG"
-                options.batchSystem = self.batchSystemName
-                options.workDir = temp_dir
-                options.maxCores = self.cpu_count
+            options = Job.Runner.getDefaultOptions(self._getTestJobStorePath())
+            options.logLevel = "DEBUG"
+            options.batchSystem = self.batchSystemName
+            options.workDir = temp_dir
+            options.maxCores = self.cpu_count
 
-                counter_path = os.path.join(temp_dir, 'counter')
-                resetCounters(counter_path)
-                min_value, max_value = getCounters(counter_path)
-                assert (min_value, max_value) == (0, 0)
+            counter_path = os.path.join(temp_dir, 'counter')
+            resetCounters(counter_path)
+            min_value, max_value = getCounters(counter_path)
+            assert (min_value, max_value) == (0, 0)
 
-                root = Job.wrapJobFn(max_concurrency, self.cpu_count, counter_path, cores_per_job,
-                                     cores=0.1, memory='32M', disk='1M')
-                value = Job.Runner.startToil(root, options)
-                self.assertEqual(value, self.cpu_count / cores_per_job)
+            root = Job.wrapJobFn(max_concurrency, self.cpu_count, counter_path, cores_per_job,
+                                 cores=0.1, memory='32M', disk='1M')
+            value = Job.Runner.startToil(root, options)
+            self.assertEqual(value, self.cpu_count / cores_per_job)
 
         def testPromisedRequirementStatic(self):
-            for cores_per_job in self.allocated_cores:
-                temp_dir = self._createTempDir('testFiles')
+            # for cores_per_job in self.allocated_cores:
+            cores_per_job = 1
+            temp_dir = self._createTempDir('testFiles')
 
-                options = Job.Runner.getDefaultOptions(self._getTestJobStorePath())
-                options.logLevel = "DEBUG"
-                options.batchSystem = self.batchSystemName
-                options.workDir = temp_dir
-                options.maxCores = self.cpu_count
+            options = Job.Runner.getDefaultOptions(self._getTestJobStorePath())
+            options.logLevel = "DEBUG"
+            options.batchSystem = self.batchSystemName
+            options.workDir = temp_dir
+            options.maxCores = self.cpu_count
 
-                counter_path = os.path.join(temp_dir, 'counter')
-                resetCounters(counter_path)
-                min_value, max_value = getCounters(counter_path)
-                assert (min_value, max_value) == (0, 0)
+            counter_path = os.path.join(temp_dir, 'counter')
+            resetCounters(counter_path)
+            min_value, max_value = getCounters(counter_path)
+            assert (min_value, max_value) == (0, 0)
 
-                root = Job()
-                one1 = Job.wrapFn(one, cores=0.1, memory='32M', disk='1M')
-                one2 = Job.wrapFn(one, cores=0.1, memory='32M', disk='1M')
-                mb = Job.wrapFn(thirtyTwoMB, cores=0.1, memory='32M', disk='1M')
-                root.addChild(one1)
-                root.addChild(one2)
-                root.addChild(mb)
-                for _ in range(self.cpu_count):
-                    root.addFollowOn(Job.wrapFn(measure_concurrency, counter_path,
-                                                cores=PromisedRequirement(lambda x: x * cores_per_job, one1.rv()),
-                                                memory=PromisedRequirement(mb.rv()),
-                                                disk=PromisedRequirement(lambda x, y: x + y + 1022, one1.rv(), one2.rv())))
-                Job.Runner.startToil(root, options)
-                min_value, max_value = getCounters(counter_path)
-                self.assertEqual(max_value, self.cpu_count / cores_per_job)
+            root = Job()
+            one1 = Job.wrapFn(one, cores=0.1, memory='32M', disk='1M')
+            one2 = Job.wrapFn(one, cores=0.1, memory='32M', disk='1M')
+            mb = Job.wrapFn(thirtyTwoMB, cores=0.1, memory='32M', disk='1M')
+            root.addChild(one1)
+            root.addChild(one2)
+            root.addChild(mb)
+            for _ in range(self.cpu_count):
+                root.addFollowOn(Job.wrapFn(measure_concurrency, counter_path,
+                                            cores=PromisedRequirement(lambda x: x * cores_per_job, one1.rv()),
+                                            memory=PromisedRequirement(mb.rv()),
+                                            disk=PromisedRequirement(lambda x, y: x + y + 1022, one1.rv(), one2.rv())))
+            Job.Runner.startToil(root, options)
+            min_value, max_value = getCounters(counter_path)
+            self.assertEqual(max_value, self.cpu_count / cores_per_job)
 
 
 def max_concurrency(job, cpu_count, filename, cores_per_job):
@@ -212,10 +214,11 @@ class SingleMachinePromisedRequirementsTest(hidden.AbstractPromisedRequirementsT
     Tests against the SingleMachine batch system
     """
 
-    def createBatchSystem(self):
-        return "singleMachine", SingleMachineBatchSystem(config=self.config,
-                                                         maxCores=self.cpu_count,
-                                                         maxMemory=1e9, maxDisk=1001)
+    def getBatchSystemName(self):
+        return "singleMachine"
+
+    def tearDown(self):
+        pass
 
 
 @needs_mesos
@@ -224,16 +227,12 @@ class MesosPromisedRequirementsTest(hidden.AbstractPromisedRequirementsTest, Mes
     Tests against the Mesos batch system
     """
 
-    def createBatchSystem(self):
-        from toil.batchSystems.mesos.batchSystem import MesosBatchSystem
+    def getBatchSystemName(self):
         self._startMesos(self.cpu_count)
-        return "mesos", MesosBatchSystem(config=self.config,
-                                         maxCores=self.cpu_count, maxMemory=1e9, maxDisk=1001,
-                                         masterAddress='127.0.0.1:5050')
+        return "mesos"
 
     def tearDown(self):
         self._stopMesos()
-        super(MesosPromisedRequirementsTest, self).tearDown()
 
 
 
